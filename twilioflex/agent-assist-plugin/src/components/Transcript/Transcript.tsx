@@ -15,84 +15,98 @@
  */
 
 //@ts-nocheck
-import React, { useEffect } from 'react';
+import React, {useEffect} from 'react';
 import * as Flex from '@twilio/flex-ui'; // eslint-disable-line node/no-unpublished-import
-import { useScript } from '../../../lib/src/third_party/hooks/useScript';
+import {useScript} from '../../../../../third_party/twilioflex/hooks/useScript';
 import {
-    ChatMessage,
-    ChatBubble,
-    ChatMessageMeta,
-    ChatMessageMetaItem,
-    useChatLogger,
-    ChatLogger,
+  ChatMessage,
+  ChatBubble,
+  ChatMessageMeta,
+  ChatMessageMetaItem,
+  useChatLogger,
+  ChatLogger,
 } from '@twilio-paste/chat-log';
-import { Box } from '@twilio-paste/core/box';
+import {Box} from '@twilio-paste/core/box';
 
 type messageVariant = 'inbound' | 'outbound';
 
 const transcriptFactory = (
-    variant: messageVariant,
-    message: string,
-    metaLabel: string
+  variant: messageVariant,
+  message: string,
+  metaLabel: string
 ) => {
-    const time = new Date().toLocaleString('en-US', {
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: true,
-    });
-    return {
-        variant,
-        content: (
-            <ChatMessage variant={variant}>
-                <ChatBubble>{message}</ChatBubble>
-                <ChatMessageMeta aria-label={metaLabel + time}>
-                    <ChatMessageMetaItem>{time}</ChatMessageMetaItem>
-                </ChatMessageMeta>
-            </ChatMessage>
-        ),
-    };
+  const time = new Date().toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+  });
+  return {
+    variant,
+    content: (
+      <ChatMessage variant={variant}>
+        <ChatBubble>{message}</ChatBubble>
+        <ChatMessageMeta aria-label={metaLabel + time}>
+          <ChatMessageMetaItem>{time}</ChatMessageMetaItem>
+        </ChatMessageMeta>
+      </ChatMessage>
+    ),
+  };
 };
 
 export const Transcript = (): JSX.Element | null => {
-    const { chats, push } = useChatLogger();
-    useEffect(()=>{
-        // Create IE + others compatible event handler
-        var eventMethod = window.addEventListener ? "addEventListener" : "attachEvent";
-        var eventer = window[eventMethod];
-        var messageEvent = eventMethod == "attachEvent" ? "onmessage" : "message";
-        // Listen to message from child window
-        function newMessageReceievedHandler(e){
-            switch (e.data.type) {
-                case 'new-message-received':
-                    let userRole = e.data.detail.participantRole;
-                    let message = e.data.detail.content;
-                    let variant = userRole === 'END_USER' ? 'inbound' : 'outbound';
-                    let metaLabel =
-                        userRole === 'END_USER' ? 'said by customer at ' : 'said by agent at ';
-                    push(transcriptFactory(variant, message, metaLabel));
-                    break;
-            }
-        }
+  const {chats, push} = useChatLogger();
+  useEffect(() => {
+    // Create IE + others compatible event handler
+    const eventMethod = window.addEventListener
+      ? 'addEventListener'
+      : 'attachEvent';
+    const eventer = window[eventMethod];
+    const messageEvent = eventMethod == 'attachEvent' ? 'onmessage' : 'message';
+    // Listen to message from child window
+    function newMessageReceievedHandler(e) {
+      switch (e.data.type) {
+        case 'new-message-received':
+          const userRole = e.data.detail.participantRole;
+          const message = e.data.detail.content;
+          const variant = userRole === 'END_USER' ? 'inbound' : 'outbound';
+          const metaLabel =
+            userRole === 'END_USER'
+              ? 'said by customer at '
+              : 'said by agent at ';
+          push(transcriptFactory(variant, message, metaLabel));
+          break;
+      }
+    }
 
-        eventer(messageEvent, newMessageReceievedHandler, false);
+    eventer(messageEvent, newMessageReceievedHandler, false);
 
-        return () => {
-            const removeEventMethod = window.removeEventListener ? "removeEventListener" : "detachEvent";
-            const removeEventer = window[removeEventMethod];
-            const removeMessageEvent = removeEventMethod == "detachEvent" ? "onmessage" : "message";
-            removeEventer(removeMessageEvent, newMessageReceievedHandler)
-        }
-    },[]);
+    return () => {
+      const removeEventMethod = window.removeEventListener
+        ? 'removeEventListener'
+        : 'detachEvent';
+      const removeEventer = window[removeEventMethod];
+      const removeMessageEvent =
+        removeEventMethod == 'detachEvent' ? 'onmessage' : 'message';
+      removeEventer(removeMessageEvent, newMessageReceievedHandler);
+    };
+  }, []);
 
-    return <div style={{
+  return (
+    <div
+      style={{
         display: 'flex',
         flex: '1 1 auto',
         overflow: 'auto',
         padding: '1.25rem 1rem',
         lineHeight: '1rem',
-        color: 'rgb(18, 28, 45)'}
-}>
-        <div style={{ width: '100%' }}><ChatLogger chats={chats} /></div></div>;
+        color: 'rgb(18, 28, 45)',
+      }}
+    >
+      <div style={{width: '100%'}}>
+        <ChatLogger chats={chats} />
+      </div>
+    </div>
+  );
 };
 
 Transcript.displayName = 'Transcript';
