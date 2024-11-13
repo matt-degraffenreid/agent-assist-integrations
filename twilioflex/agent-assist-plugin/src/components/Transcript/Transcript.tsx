@@ -17,6 +17,7 @@
 //@ts-nocheck
 import React, { useEffect } from 'react';
 import * as Flex from '@twilio/flex-ui'; // eslint-disable-line node/no-unpublished-import
+
 import { useScript } from '../../../../../third_party/twilioflex/hooks/useScript';
 import {
     ChatMessage,
