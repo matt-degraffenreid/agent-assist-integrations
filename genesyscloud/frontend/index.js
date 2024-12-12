@@ -36,12 +36,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 
 const {
-  OAUTH_CLIENT_ID,
-  GENESYS_CLOUD_REGION,
-  PROJECT_ID,
   APPLICATION_SERVER_URL,
-  PROXY_SERVER,
+  CHANNEL,
   CONVERSATION_PROFILE,
+  GENESYS_CLOUD_REGION,
+  OAUTH_CLIENT_ID,
+  PROXY_SERVER,
   FEATURES,
 } = process.env;
 
@@ -57,6 +57,8 @@ app.use(timeout('30s'));
 app.use(express.json());
 app.use(haltOnTimedout);
 app.use(cookieParser());
+app.use(express.static(__dirname));
+app.use(haltOnTimedout);
 app.use(express.urlencoded({extended: false}));
 
 function haltOnTimedout(req, res, next) {
@@ -83,7 +85,8 @@ const clientID = OAUTH_CLIENT_ID;
 const proxyServer = PROXY_SERVER;
 const applicationServer = APPLICATION_SERVER_URL;
 const genesysCloudRegion = GENESYS_CLOUD_REGION;
-res.render("main", {conversationProfile,clientID,features,proxyServer,applicationServer,genesysCloudRegion});
+const channel = CHANNEL;
+res.render("main", {conversationProfile,clientID,features,proxyServer,applicationServer,genesysCloudRegion,channel});
 })
 
 
@@ -98,4 +101,3 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-

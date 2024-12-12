@@ -12,19 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Please update the following parameters before running the script
-export GCP_PROJECT_ID='your-project-id'
-export AA_MODULE_APPLICATION_SERVER="your-ui-module"
-export CONVERSATION_PROFILE='your-conversation-profile'
-export FEATURES='your-features-list'
-export UI_MODULE_SERVICE_ACCOUNT="your-ui-module-aa"
-export OAUTH_CLIENT_ID="your-oauth-client-id"
-export GENESYS_CLOUD_REGION="mypurecloud.com"
-export GENESYS_CLOUD_ENVIORNMENT="prod"
-export APPLICATION_SERVER_URL="your-aa-application-url"
-export PROXY_SERVER="your-proxy-server-url"
+# Source the .env file
+source .env
+cloud_run_service=run.googleapis.com
+cloud_build_service=cloudbuild.googleapis.com
+
+
+# Make a copy of the .env.example file and name it to .env then update the
+# variables inside it
 gcloud config set project $GCP_PROJECT_ID
 
+# Create a service account for the web application.
+# Check if cloud run service is already enabled
+if [[ "$cloud_run_service" = \
+  `gcloud services list --enabled --filter=$cloud_run_service --format='value(NAME)'` ]]; then
+  echo "Skip enable cloud run API as it exists."
+else
+  gcloud services enable $cloud_run_service
+fi
+# Check if cloud build service is already enabled
+if [[ "$cloud_build_service" = \
+  `gcloud services list --enabled --filter=$cloud_build_service --format='value(NAME)'` ]]; then
+  echo "Skip enable cloud build API as it exists."
+else
+  gcloud services enable $cloud_build_service
+fi
+
+# Create a service account for the web application.
 ui_module_service_account="$UI_MODULE_SERVICE_ACCOUNT@$GCP_PROJECT_ID.iam.gserviceaccount.com"
 if [[ "$ui_module_service_account" = \
   `gcloud iam service-accounts list --filter=$ui_module_service_account --format='value(EMAIL)'` ]]; then
@@ -34,6 +48,11 @@ else
     --display-name "UI Module Web Application Service Account"
 fi
 
+# Assign the service account dialogflow client role.
+gcloud projects add-iam-policy-binding $GCP_PROJECT_ID \
+  --member="serviceAccount:$ui_module_service_account" \
+  --role='roles/dialogflow.client' \
+  --condition=None
 
 # Deploy the gcloud run region.
 # PROXY_SERVER should be the service that runs ui-connector
@@ -43,7 +62,7 @@ gcloud run deploy $AA_MODULE_APPLICATION_SERVER \
 --memory 1Gi --platform managed \
 --region us-central1 \
 --allow-unauthenticated \
---set-env-vars ^~^OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID~GENESYS_CLOUD_REGION=$GENESYS_CLOUD_REGION~GENESYS_CLOUD_ENVIORNMENT=$GENESYS_CLOUD_ENVIORNMENT~CONVERSATION_PROFILE=$CONVERSATION_PROFILE~FEATURES=$FEATURES~PROJECT_ID=$GCP_PROJECT_ID~PROXY_SERVER=$PROXY_SERVER~APPLICATION_SERVER_URL=$APPLICATION_SERVER_URL
+--set-env-vars ^~^OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID~GENESYS_CLOUD_REGION=$GENESYS_CLOUD_REGION~GENESYS_CLOUD_ENVIORNMENT=$GENESYS_CLOUD_ENVIORNMENT~CONVERSATION_PROFILE=$CONVERSATION_PROFILE~FEATURES=$FEATURES~PROJECT_ID=$GCP_PROJECT_ID~PROXY_SERVER=$PROXY_SERVER~APPLICATION_SERVER_URL=$APPLICATION_SERVER_URL~CHANNEL=$CHANNEL
 
 export APPLICATION_SERVER_URL=$(gcloud run services describe $AA_MODULE_APPLICATION_SERVER --region us-central1 --format 'value(status.url)')
 
@@ -54,4 +73,4 @@ gcloud run deploy $AA_MODULE_APPLICATION_SERVER \
 --memory 1Gi --platform managed \
 --region us-central1 \
 --allow-unauthenticated \
---set-env-vars ^~^OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID~GENESYS_CLOUD_REGION=$GENESYS_CLOUD_REGION~GENESYS_CLOUD_ENVIORNMENT=$GENESYS_CLOUD_ENVIORNMENT~CONVERSATION_PROFILE=$CONVERSATION_PROFILE~FEATURES=$FEATURES~PROJECT_ID=$GCP_PROJECT_ID~PROXY_SERVER=$PROXY_SERVER~APPLICATION_SERVER_URL=$APPLICATION_SERVER_URL
+--set-env-vars ^~^OAUTH_CLIENT_ID=$OAUTH_CLIENT_ID~GENESYS_CLOUD_REGION=$GENESYS_CLOUD_REGION~GENESYS_CLOUD_ENVIORNMENT=$GENESYS_CLOUD_ENVIORNMENT~CONVERSATION_PROFILE=$CONVERSATION_PROFILE~FEATURES=$FEATURES~PROJECT_ID=$GCP_PROJECT_ID~PROXY_SERVER=$PROXY_SERVER~APPLICATION_SERVER_URL=$APPLICATION_SERVER_URL~CHANNEL=$CHANNEL
