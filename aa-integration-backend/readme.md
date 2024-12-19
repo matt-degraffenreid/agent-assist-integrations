@@ -66,7 +66,7 @@ A backend infrastructure for Agent Assist integration, including Cloud Pub/Sub I
 
 ## [Cloud Pub/Sub](https://cloud.google.com/pubsub/docs/publisher)
 
-Cloud Pub/Sub topics should be configured in conversation profiles. Agent Assist will publish suggestions, new messages and conversation lifecycle related events to the topic, with suggestions in the form of [HumanAgentAssistantEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/HumanAgentAssistantEvent) and both new messages and conversation lifecycle events packed as [ConversationEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/ConversationEvent). For each conversation profile, these three kinds of event messages are published to different topics. A sample conversation lifecycle event message can be `{"conversation":"projects/your-project-id/locations/global/conversations/your-conversation-id","type":"CONVERSATION_STARTED"}`, which indicates the start of a conversation.
+Cloud Pub/Sub topics should be configured in conversation profiles. Agent Assist will publish suggestions, new messages and conversation lifecycle related events to the topic, with  suggestions in the form of [HumanAgentAssistantEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/HumanAgentAssistantEvent) and both new messages and conversation lifecycle events and new recognition result notification events are packed as [ConversationEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/ConversationEvent). For each conversation profile, these four kinds of event messages are published to different topics. A sample conversation lifecycle event message can be `{"conversation":"projects/your-project-id/locations/global/conversations/your-conversation-id","type":"CONVERSATION_STARTED"}`, which indicates the start of a conversation.
 
 ## Cloud Pub/Sub Interceptor (deployed on [Cloud Run](https://cloud.google.com/run/docs))
 
@@ -145,7 +145,7 @@ After getting valid JWT, the steps for sending Dialogflow calls are listed below
 
 ## Cloud Pub/Sub Interceptor
 
-The interceptor is dedicated to receiving messages posted by Cloud Pub/Sub topics. It expects suggestions for human agents, new messages and conversation lifecycle events posted to three separate request URLs.
+The interceptor is dedicated to receiving messages posted by Cloud Pub/Sub topics. It expects suggestions for human agents, new messages, new recognition result notifications and conversation lifecycle events posted to four separate request URLs.
 
 `POST /human-agent-assistant-event`
 
@@ -173,6 +173,15 @@ A bad request returns a `400` status code and corresponding error message.
 
 **Request Body**
 The request body should be JSON data that contains a [ConversationEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/ConversationEvent) as [PubSubMessage](https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage).data.
+
+**Response**
+It returns a `204` status code with additional information, which is considered as a message acknowledgement by Cloud Pub/Sub.
+
+
+`POST /new-recognition-result-notification-event`
+
+**Request Body**
+The request body should be JSON data that contains a [ConversationEvent](https://cloud.google.com/dialogflow/es/docs/reference/rest/v2beta1/ConversationEvent) [PubSubMessage](https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage).data And the request body should also contains [PubSubMessage attribues](https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage) 'participant_role' and 'message_id'.
 
 **Response**
 It returns a `204` status code with additional information, which is considered as a message acknowledgement by Cloud Pub/Sub.
@@ -243,6 +252,15 @@ new-message-event({
   'publish_time': pubsub_message['publishTime'],
   'message_id': pubsub_message['messageId']
 }) # Sends new message event notification pushed by Cloud Pub/Sub
+new-recognition-result-notification-event({
+  'conversation_name': conversation_name,
+  'data': data,
+  'data_type': 'new-recognition-result-notification-event',
+  'publish_time': pubsub_message['publishTime'],
+  'message_id': pubsub_message['messageId']
+  'participant_role': pubsub_message['attributes']['participant_role']
+  'new_recognition_result_message_id': pubsub_message['attributes']['message_id']
+}) # Sends new recognition result notification pushed by Cloud Pub/Sub
 ```
 
 ### Dialogflow Proxy APIs
@@ -269,6 +287,12 @@ These APIs handle client requests about sending feedback signals to Dialogflow.
 `GET /<version>/projects/<project>/locations/<location>/conversationProfiles/<path>`
 
 `GET /<version>/projects/<project>/locations/<location>/conversationModels/<path>`
+
+`GET /<version>/projects/<project>/locations/<location>/suggestions:searchKnowledge`
+
+`GET /<version>/projects/<project>/locations/<location>/statelessSuggestion:generate`
+
+`GET /<version>/projects/<project>/locations/<location>/generators/<path:path>`
 
 **Request Headers**
 Authorization: {ValidJWT}
@@ -311,7 +335,7 @@ Please prepare the following environment variables as you deploy the infrastruct
 10. `VPC_CONNECTOR_NAME`: the name of your [Serverless VPC Access connector](https://cloud.google.com/run/docs/configuring/connecting-vpc#create-connector) for connecting Cloud Run services to [Memorystore for Redis](https://cloud.google.com/memorystore/docs/redis/redis-overview).
 11. `VPC_NETWORK`: the VPC network to attach your Serverless VPC Access connector to. The value should be 'default' if you do not set up VPC for your GCP project.
 12. `REDIS_IP_RANGE`: an unreserved internal IP network for your Serverless VPC Access connector. A '/28' of unallocated space is required, for example, 10.8.0.0/28 works in most new projects.
-13. `AUTH_OPTION`: The option of authenticating users when registering JWT. By default it's empty and no users are allowed to register JWT via UI Connector service. Supported values: 'Salesforce', 'GenesysCloud', 'Twilio', 'Skip' (skip auth token verification, should not be used in production).
+13. `AUTH_OPTION`: The option of authenticating users when registering JWT. By default it's empty and no users are allowed to register JWT via UI Connector service. Supported values: 'SalesforceLWC', 'Salesforce', 'GenesysCloud', 'Twilio', 'Skip' (skip auth token verification, should not be used in production).
 
 ## Authorize GCP Processes
 
@@ -362,10 +386,11 @@ Implement your authentication method `auth.check_auth` or specify supported iden
 ```bash
 # By default it's empty and no users are allowed to register JWT via UI Connector service.
 # Supported values:
-#   1. 'Salesforce': verify the auth token using Salesforce OpenID Connect. Required environment variable: SALESFORCE_ORGANIZATION_ID.
-#   2. 'GenesysCloud': verify the auth token using Genesys SDK UsersAPI.
-#   3. 'Twilio': verify the auth token for Twilio. Required environment variable: TWILIO_FLEX_ENVIRONMENT.
-#   4. 'Skip': skip auth token verification, should not be used in production.
+#   1. 'SalesforceLWC': verify a SF OAuth Client Credentials auth token using the `oauth2/userinfo` REST endpoint. Required environment variables: SALESFORCE_ORGANIZATION_ID, SALESFORCE_DOMAIN.
+#   2. 'Salesforce': verify the auth token using Salesforce OpenID Connect. Required environment variable: SALESFORCE_ORGANIZATION_ID.
+#   3. 'GenesysCloud': verify the auth token using Genesys SDK UsersAPI.
+#   4. 'Twilio': verify the auth token for Twilio. Required environment variable: TWILIO_FLEX_ENVIRONMENT.
+#   5. 'Skip': skip auth token verification, should not be used in production.
 $ export AUTH_OPTION='Salesforce'
 ```
 
@@ -470,7 +495,7 @@ Note the service URL for deployed Cloud Pub/Sub Interceptor as environment varia
 
 Please create and configure your conversation profile with Cloud Pub/Sub topics before create subscriptions.
 
-Here is an example of creating a conversation profile with Article Suggestion feature and three specified Cloud Pub/Sub topics. You could also check this [guide](https://cloud.google.com/agent-assist/docs/conversation-profile) for instructions about how to configure it on [Agent Assist Console](https://agentassist.cloud.google.com/).
+Here is an example of creating a conversation profile with Article Suggestion feature and four specified Cloud Pub/Sub topics. You could also check this [guide](https://cloud.google.com/agent-assist/docs/conversation-profile) for instructions about how to configure it on [Agent Assist Console](https://agentassist.cloud.google.com/).
 
 HTTP method and URL:
 
@@ -518,6 +543,10 @@ Request JSON body:
     "topic": "projects/my-project-id/topics/aa-new-message-event",
     "messageFormat": "JSON"
   },
+   "newRecognitionResultNotificationConfig": {
+    "topic": "projects/my-project/topics/aa-new-recognition-result-notification-event",
+    "messageFormat": "JSON"
+  },
   "languageCode": "en-US"
 }
 ```
@@ -553,5 +582,11 @@ $ export TOPIC_ID='your-new-message-event-topic-id' && gcloud pubsub subscriptio
 # For conversation lifecycle events
 $ export TOPIC_ID='your-conversation-lifecycle-event-topic' && gcloud pubsub subscriptions create $SUBSCRIPTION_NAME --topic $TOPIC_ID \
    --push-endpoint=$INTERCEPTOR_SERVICE_URL/conversation-lifecycle-event \
+   --push-auth-service-account=cloud-run-pubsub-invoker@$GCP_PROJECT_ID.iam.gserviceaccount.com
+
+# For new recognition result notification events
+$ export TOPIC_ID='your-new-recognition-result-notification-event-topic' && gcloud pubsub subscriptions create
+$SUBSCRIPTION_NAME --topic $TOPIC_ID \
+   --push-endpoint=$INTERCEPTOR_SERVICE_URL/new-recognition-result-notification-event \
    --push-auth-service-account=cloud-run-pubsub-invoker@$GCP_PROJECT_ID.iam.gserviceaccount.com
 ```

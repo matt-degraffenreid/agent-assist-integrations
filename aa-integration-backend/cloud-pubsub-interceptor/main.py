@@ -31,6 +31,7 @@ redis_host = os.environ.get('REDISHOST', 'localhost')
 redis_port = int(os.environ.get('REDISPORT', 6379))
 redis_client = redis.StrictRedis(host=redis_host, port=redis_port)
 
+
 def get_conversation_name_without_location(conversation_name):
     """Returns a conversation name without its location id."""
     conversation_name_without_location = conversation_name
@@ -55,8 +56,23 @@ def cloud_pubsub_handler(request, data_type):
         return True
 
     pubsub_message = envelope['message']
+    participant_role = ""
+    new_recognition_result_message_id = ''
 
-    if isinstance(pubsub_message, dict) and 'data' in pubsub_message:
+    if not isinstance(pubsub_message, dict):
+        msg = 'Invalid Pub/Sub message, message inside the envelope should be valid JSON format https://cloud.google.com/pubsub/docs/reference/rest/v1/PubsubMessage.'
+        logging.warning('Warning: {}'.format(msg))
+        return True
+
+    if 'attributes' in pubsub_message:
+        attributes = pubsub_message['attributes']
+        if attributes is not None and isinstance(attributes, dict):
+            if "participant_role" in attributes:
+                participant_role = attributes['participant_role']
+            if "message_id" in attributes:
+                new_recognition_result_message_id = attributes['message_id']
+
+    if 'data' in pubsub_message:
         data = base64.b64decode(pubsub_message['data']).decode('utf-8')
         logging.debug('Subscribed Pub/Sub message: {}'.format(data))
         data_object = json.loads(data)
@@ -80,6 +96,11 @@ def cloud_pubsub_handler(request, data_type):
                     'publish_time': pubsub_message['publishTime'],
                     'message_id': pubsub_message['messageId']}
         server_id = '1'
+        if data_type == 'new-recognition-result-notification-event':
+            msg_data['participant_role'] = participant_role
+            msg_data['new_recognition_result_message_id'] = new_recognition_result_message_id
+            logging.debug('participant role {0} message id {1} for new recognition result'.format(
+                participant_role, new_recognition_result_message_id))
         if redis_client.exists(conversation_name) == 0:
             logging.warning(
                 'No SERVER_ID for conversation_name {}.'.format(conversation_name))
@@ -119,6 +140,15 @@ def subscribe_message_events():
         return f'Bad Request', 400
 
     return ('Received by cloud run service as a ConversationEvent.', 204)
+
+
+@app.route('/new-recognition-result-notification-event', methods=['POST'])
+def subscribe_new_recognition_result_events():
+    """Receives new recognition result events from pre-configured dialogflow Pub/Sub topic."""
+    if not cloud_pubsub_handler(request, 'new-recognition-result-notification-event'):
+        return f'Bad Request', 400
+
+    return ('Received by cloud run service as a New recognition result notification.', 204)
 
 
 if __name__ == '__main__':

@@ -26,6 +26,7 @@
 #           1).`projects/${GCP_PROJECT_ID}/topics/${CONVERSATION_LIFECYCLE_NOTIFICATIONS_TOPIC_ID}`
 #           2).`projects/${GCP_PROJECT_ID}/topics/${NEW_MESSAGE_NOTIFICATIONS_TOPIC_ID}`
 #           3).`projects/${GCP_PROJECT_ID}/topics/${AGENT_ASSIST_NOTIFICATIONS_TOPIC_ID}`
+#           4).`projects/${GCP_PROJECT_ID}/topics/${NEW_RECOGNITION_RESULT_NOTIFICATIONS_TOPIC_ID}`
 #     3. Make sure your account has Owner permissions in your GCP project or been granted the following IAM roles.
 #       - Project IAM Admin (roles/resourcemanager.projectIamAdmin)
 #       - Service Usage Admin (roles/serviceusage.serviceUsageAdmin)
@@ -51,6 +52,7 @@ export ADMIN_ACCOUNT='your-admin-account'
 export AGENT_ASSIST_NOTIFICATIONS_TOPIC_ID='aa-new-suggestion-topic'
 export NEW_MESSAGE_NOTIFICATIONS_TOPIC_ID='aa-new-message-topic'
 export CONVERSATION_LIFECYCLE_NOTIFICATIONS_TOPIC_ID='aa-conversation-event-topic'
+export NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID='aa-intermediate-transcript-topic'
 
 # The IP Range must not overlap with existing IP address reservations
 # in our VPC Network. The default IP range below will work in most new project
@@ -96,6 +98,7 @@ export CLOUD_RUN_PUBSUB_INVOKER_NAME='cloud-run-pubsub-invoker'
 export AGENT_ASSIST_NOTIFICATIONS_SUBSCRIPTION_ID='aa-new-suggestion-sub'
 export NEW_MESSAGE_NOTIFICATIONS_SUBSCRIPTION_ID='aa-new-message-sub'
 export CONVERSATION_LIFECYCLE_NOTIFICATIONS_SUBSCRIPTION_ID='aa-conversation-event-sub'
+export NEW_RECOGNITION_RESULT_NOTIFICATION_SUBSCRIPTION_ID='aa-intermediate-transcript-event-sub'
 
 # Optionally load environment variables from a .env file if one exists
 if [ ! -f ./.env ]; then
@@ -260,7 +263,9 @@ gcloud run deploy $CONNECTOR_SERVICE_NAME \
   --set-env-vars GCP_PROJECT_ID=$GCP_PROJECT_ID \
   --set-env-vars AUTH_OPTION=$AUTH_OPTION \
   --set-env-vars SALESFORCE_DOMAIN=$SALESFORCE_DOMAIN \
-  --set-env-vars SALESFORCE_ORGANIZATION_ID=$SALESFORCE_ORGANIZATION_ID
+  --set-env-vars SALESFORCE_ORGANIZATION_ID=$SALESFORCE_ORGANIZATION_ID \
+  --set-env-vars GENESYS_CLOUD_ENVIRONMENT=$GENESYS_CLOUD_ENVIRONMENT
+
 
 echo -e '\n\n =================== Deploy Cloud PubSub Interceptor Service =================== \n\n'
 
@@ -301,6 +306,14 @@ if [[ "$new_message_notifications_topic_name" = \
   echo "Skip creating Pub/Sub topic $NEW_MESSAGE_NOTIFICATIONS_TOPIC_ID as it exists."
 else
   gcloud pubsub topics create $NEW_MESSAGE_NOTIFICATIONS_TOPIC_ID
+fi
+
+new_recognition_result_notifications_topic_name="projects/$GCP_PROJECT_ID/topics/$NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID"
+if [[ "$new_recognition_result_notifications_topic_name" = \
+  `gcloud pubsub topics list --filter=$NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID --format='value(name)'` ]]; then
+  echo "Skip creating Pub/Sub topic $NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID as it exists."
+else
+  gcloud pubsub topics create $NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID
 fi
 
 
@@ -375,6 +388,24 @@ else
 fi
 
 
+
+# Create a subscription for the Pub/Sub topic you configured for new recognition result message events.
+new_recognition_result_notifications_sub="projects/$GCP_PROJECT_ID/subscriptions/$NEW_RECOGNITION_RESULT_NOTIFICATION_SUBSCRIPTION_ID"
+if [[ "$new_recognition_result_notifications_sub" = \
+  `gcloud pubsub subscriptions list --filter=$new_recognition_result_notifications_sub --format='value(name)'` ]]; then
+  gcloud pubsub subscriptions update $NEW_RECOGNITION_RESULT_NOTIFICATION_SUBSCRIPTION_ID \
+    --expiration-period=never \
+    --push-endpoint=$interceptor_service_url/new-recognition-result-notification-event \
+    --push-auth-service-account=$pubsub_service_account
+else
+  gcloud pubsub subscriptions create $NEW_RECOGNITION_RESULT_NOTIFICATION_SUBSCRIPTION_ID \
+    --topic $NEW_RECOGNITION_RESULT_NOTIFICATION_TOPIC_ID \
+    --expiration-period=never \
+    --push-endpoint=$interceptor_service_url/new-recognition-result-notification-event \
+    --push-auth-service-account=$pubsub_service_account
+fi
+
+
 echo -e '\n\n =============================================================================== \n\n'
 
 echo 'Deployment completed. Visit this URL of your UI Connector Cloud Run Service for a chat demo.'
@@ -383,3 +414,4 @@ ui_connector_service_info=`gcloud run services describe $CONNECTOR_SERVICE_NAME 
 echo $ui_connector_service_info | head -4 | cut -d' ' -f 8
 
 echo -e '\n\n =============================================================================== \n\n'
+ 
