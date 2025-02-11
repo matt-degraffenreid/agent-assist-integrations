@@ -3,7 +3,7 @@ async-timeout==3.0.1
 attrs==21.2.0
 bidict==0.21.3
 cachetools==4.2.4
-certifi==2021.10.8
+certifi==2024.7.4
 chardet==4.0.0
 charset-normalizer==2.0.7
 click==8.0.1
