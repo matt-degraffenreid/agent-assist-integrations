@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,14 @@ app = Flask(__name__)
 # Redis setup
 redis_host = os.environ.get('REDISHOST', 'localhost')
 redis_port = int(os.environ.get('REDISPORT', 6379))
-redis_client = redis.StrictRedis(host=redis_host, port=redis_port)
+redis_client = redis.StrictRedis(
+    host=redis_host, port=redis_port,
+    health_check_interval=10,
+    socket_connect_timeout=15,
+    retry_on_timeout=True,
+    socket_keepalive=True,
+    retry=redis.retry.Retry(redis.backoff.ExponentialBackoff(cap=5, base=1), 5),
+    retry_on_error=[redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, redis.exceptions.ResponseError])
 
 
 def get_conversation_name_without_location(conversation_name):

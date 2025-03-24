@@ -274,6 +274,7 @@ if [[ -z $VPC_CONNECTOR_NAME ]]; then
   --subnet $VPC_SUBNET \
   --clear-vpc-connector \
   --min-instances=1 \
+  --no-cpu-throttling \
   --update-secrets=/secret/jwt_secret_key=${JWT_SECRET_NAME}:latest \
   --set-env-vars REDISHOST=$REDIS_HOST \
   --set-env-vars REDISPORT=$REDIS_PORT \
@@ -294,6 +295,7 @@ else
     --vpc-connector $VPC_CONNECTOR_NAME \
     --clear-network \
     --min-instances=1 \
+    --no-cpu-throttling \
     --update-secrets=/secret/jwt_secret_key=${JWT_SECRET_NAME}:latest \
     --set-env-vars REDISHOST=$REDIS_HOST \
     --set-env-vars REDISPORT=$REDIS_PORT \
@@ -321,6 +323,7 @@ if [[ -z $VPC_CONNECTOR_NAME ]]; then
     --clear-vpc-connector \
     --ingress=internal \
     --min-instances=1 \
+    --no-cpu-throttling \
     --set-env-vars REDISHOST=$REDIS_HOST \
     --set-env-vars REDISPORT=$REDIS_PORT
 else
@@ -335,6 +338,7 @@ else
     --clear-network \
     --ingress=internal \
     --min-instances=1 \
+    --no-cpu-throttling \
     --set-env-vars REDISHOST=$REDIS_HOST \
     --set-env-vars REDISPORT=$REDIS_PORT
 fi

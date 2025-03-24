@@ -49,6 +49,12 @@ A backend infrastructure for Agent Assist integration, including Cloud Pub/Sub I
 ├── deploy.sh - An automated deployment script
 ├── images
 ├── readme.md
+├── terraform
+│   ├── backend.tf
+│   ├── cloudbuild.yaml
+│   ├── main.tf
+│   ├── variables.tf
+│   └── versions.tf
 └── ui-connector
     ├── Dockerfile - Builds Docker image for UI Connector deployment on Cloud Run
     ├── auth.py - Handles JWT validation and registration
@@ -347,9 +353,23 @@ gsutil versioning set on gs://${GCP_PROJECT_ID}-tfstate
 
 If you want to automate these steps by using Cloud Build, follow this [instruction](https://cloud.google.com/build/docs/automate-builds) and use the build configuration file `./terraform_cloudbuild.yaml`. To allow Cloud Build to deploy the services, you need to grant Cloud Build Service Account the IAM roles listed at Step 1.
 
-# How to Deploy and Run
+# Connection Test
+To test your connection to UI Connector, you can send requests to the deployed Cloud Run service. You should be able to get a response `Hello, cross-origin-world!`.
+```bash
+# Send a request to deployed UI Connector that allows public access.
+curl $UI_CONNECTOR_URL/status
+# Send a request to deployed UI Connector that only allows authenticated users.
+curl -H "Authorization: Bearer "$(gcloud auth print-identity-token)  $UI_CONNECTOR_URL/status
+```
 
-An automation script has been provided at `./deploy.sh`. If you want to deploy it step by step, please check the following process.
+To build a local proxy for authenticating requests to UI Connector Cloud Run Service. Check the usage [here](https://cloud.google.com/sdk/gcloud/reference/beta/run/services/proxy).
+```bash
+# Example
+gcloud beta run services proxy ui-connector --port=8080
+# Then you can visit http://localhost:8080 at your browser.
+```
+
+# How to Deploy and Run Manually
 
 ## Prerequisite
 
@@ -507,6 +527,7 @@ $ gcloud run deploy $CONNECTOR_IMAGE_NAME \
 --subnet $VPC_SUBNET \
 --clear-vpc-connector \
 --min-instances=1 \
+--no-cpu-throttling \
 --set-env-vars REDISHOST=$REDIS_HOST,REDISPORT=$REDIS_PORT,GCP_PROJECT_ID=$GCP_PROJECT_ID,AUTH_OPTION=$AUTH_OPTION \
 --update-secrets=/secret/jwt_secret_key=${JWT_SECRET_NAME}:latest
 # Option 2: Use a created Serverless VPC Access connector for Redis connection.
@@ -520,6 +541,7 @@ $ gcloud run deploy $CONNECTOR_IMAGE_NAME \
 --vpc-connector $VPC_CONNECTOR_NAME \
 --clear-network \
 --min-instances=1 \
+--no-cpu-throttling \
 --set-env-vars REDISHOST=$REDIS_HOST,REDISPORT=$REDIS_PORT,GCP_PROJECT_ID=$GCP_PROJECT_ID,AUTH_OPTION=$AUTH_OPTION \
 --update-secrets=/secret/jwt_secret_key=${JWT_SECRET_NAME}:latest
 ```
@@ -550,6 +572,7 @@ $ gcloud run deploy $INTERCEPTOR_SERVICE_NAME \
 --clear-vpc-connector \
 --ingress=internal \
 --min-instances=1 \
+--no-cpu-throttling \
 # You can also add LOGGING_FILE here to specify the logging file path on Cloud Run.
 --set-env-vars REDISHOST=$REDIS_HOST,REDISPORT=$REDIS_PORT
 # Option 2: Use a created Serverless VPC Access connector for Redis connection.
@@ -562,6 +585,7 @@ $ gcloud run deploy $INTERCEPTOR_SERVICE_NAME \
 --clear-network \
 --ingress=internal \
 --min-instances=1 \
+--no-cpu-throttling \
 # You can also add LOGGING_FILE here to specify the logging file path on Cloud Run.
 --set-env-vars REDISHOST=$REDIS_HOST,REDISPORT=$REDIS_PORT
 ```
@@ -671,6 +695,8 @@ $SUBSCRIPTION_NAME --topic $TOPIC_ID \
 # (Optional) Integration with Cloud Build
 If you plan to build a continous deployment pipeline for the services, you can integrate Cloud Build triggers for your own repository.
 
-Check an example Cloud Build configuration file at `./cloudbuild.yaml` and related resources:
+Check an example Cloud Build configuration file at `./cloudbuild.yaml` (with deployment script) or `terraform_cloudbuild.yaml` (with Terraform).
+
+Related resources:
 - [How to create and manage build triggers](https://cloud.google.com/build/docs/automating-builds/create-manage-triggers)
 - [Cloud Run - Continuous deployment from Git using Cloud Build](https://cloud.google.com/run/docs/continuous-deployment-with-cloud-build)

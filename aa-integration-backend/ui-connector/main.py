@@ -1,4 +1,4 @@
-# Copyright 2022 Google LLC
+# Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room, rooms
 from socketio.exceptions import ConnectionRefusedError
 import redis
+import time
 
 import config
 import dialogflow
@@ -49,14 +50,25 @@ def redis_pubsub_handler(message):
         msg_object['data_type']))
 
 
+def psubscribe_exception_handler(ex, pubsub, thread):
+    logging.exception('An error occurred while getting pubsub messages: {}'.format(ex))
+    time.sleep(2)
+
+
 SERVER_ID = '{}-{}'.format(random.uniform(0, 322321),
                            datetime.now().timestamp())
 logging.info('--------- SERVER_ID: {} ---------'.format(SERVER_ID))
 redis_client = redis.StrictRedis(
-    host=config.REDIS_HOST, port=config.REDIS_PORT)
+    host=config.REDIS_HOST, port=config.REDIS_PORT,
+    health_check_interval=10,
+    socket_connect_timeout=15,
+    retry_on_timeout=True,
+    socket_keepalive=True,
+    retry=redis.retry.Retry(redis.backoff.ExponentialBackoff(cap=5, base=1), 5),
+    retry_on_error=[redis.exceptions.ConnectionError, redis.exceptions.TimeoutError, redis.exceptions.ResponseError])
 p = redis_client.pubsub(ignore_subscribe_messages=True)
 p.psubscribe(**{'{}:*'.format(SERVER_ID): redis_pubsub_handler})
-thread = p.run_in_thread()
+thread = p.run_in_thread(sleep_time=0.001, exception_handler=psubscribe_exception_handler)
 
 def get_conversation_name_without_location(conversation_name):
     """Returns a conversation name without its location id."""
