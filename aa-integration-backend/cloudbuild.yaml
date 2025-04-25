@@ -15,19 +15,25 @@
 # An example of Cloud Build configuration file to run deployment script for CI/CD pipeline.
 
 steps:
-- id: 'branch name'
+- id: 'Check required variables'
   name: 'alpine'
   entrypoint: 'sh'
   args:
   - '-c'
   - |
       echo "***********************"
-      echo "$BRANCH_NAME"
-      echo "$PROJECT_ID"
-      echo "$SERVICE_ACCOUNT_EMAIL"
+      echo "BRANCH_NAME: ${BRANCH_NAME}"
+      echo "SHORT_SHA: ${SHORT_SHA}"
+      echo "PROJECT_ID: ${PROJECT_ID}"
+      echo "SERVICE_ACCOUNT_EMAIL: ${SERVICE_ACCOUNT_EMAIL}"
       echo "***********************"
+      if [[ ! -v $BRANCH_NAME || ! -v $SHORT_SHA || ! -v $PROJECT_ID || ! -v $SERVICE_ACCOUNT_EMAIL ]]; then
+        echo "A required variable is not set, failing the build."
+        exit 1
+      fi
 
 - name: 'gcr.io/cloud-builders/gcloud'
+  id: 'Deploy Agent Assist integration backend'
   entrypoint: 'bash'
   args: ['aa-integration-backend/deploy.sh']
   env:
@@ -35,5 +41,5 @@ steps:
   - 'ADMIN_ACCOUNT=$SERVICE_ACCOUNT_EMAIL'
   - 'AUTH_OPTION=Skip'
   - 'BACKEND_DIR=/aa-integration-backend'
-  - 'CONNECTOR_SERVICE_NAME=ui-connector-presubmit-${BRANCH_NAME}'
-  - 'INTERCEPTOR_SERVICE_NAME=cloud-pubsub-interceptor-presubmit-${BRANCH_NAME}'
+  - 'CONNECTOR_SERVICE_NAME=ui-connector-presubmit-${SHORT_SHA}'
+  - 'INTERCEPTOR_SERVICE_NAME=cloud-pubsub-interceptor-presubmit-${SHORT_SHA}'
