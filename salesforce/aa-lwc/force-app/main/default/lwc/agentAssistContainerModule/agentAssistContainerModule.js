@@ -15,24 +15,30 @@
  */
 
 import google_logo from "@salesforce/resourceUrl/google_logo";
+import global_styles from "@salesforce/resourceUrl/global_styles";
 import ui_modules from "@salesforce/resourceUrl/ui_modules";
 import { MessageContext } from "lightning/messageService";
-import { loadScript } from "lightning/platformResourceLoader";
-import { getRecord } from "lightning/uiRecordApi";
+import { loadScript, loadStyle } from "lightning/platformResourceLoader";
+import { getRecord, getFieldValue } from "lightning/uiRecordApi";
 import { api, LightningElement, wire } from "lwc";
 
 import conversationName from "./helpers/conversationName";
 import integration from "./helpers/integration";
 import messageChannels from "./helpers/messageChannels";
+// import ingestContextReferences from "./helpers/ingestContextReferences";
+
+// Generally useful flags for UIM debugging and environment configuration.
+// window._uiModuleFlags = { debug: false };
 
 // This ZoneJS patch must be disabled for UI modules to work with Lightning Web Security.
 window.__Zone_disable_on_property = true;
+
 export default class AgentAssistContainerModule extends LightningElement {
   @api recordId;
   @wire(MessageContext) messageContext;
   @wire(getRecord, { recordId: "$recordId", fields: ["Contact.Phone"] }) contact;
   get contactPhone() {
-    return this.contact.data.fields.Phone.value.replaceAll(/[^\d]/g, "");
+    return getFieldValue(this.contact.data, "Contact.Phone");
   }
 
   // Configure these values in Lightning App Builder:
@@ -44,7 +50,7 @@ export default class AgentAssistContainerModule extends LightningElement {
   @api consumerKey; // SF Connected App Consumer Key
   @api consumerSecret; // SF Connected App Consumer Secret
 
-  debugMode = false;
+  debugMode = true;
   googleLogoUrl = google_logo;
   token = null;
   conversationId = null;
@@ -62,7 +68,7 @@ export default class AgentAssistContainerModule extends LightningElement {
       this.debugMode
     );
 
-    this.showTranscript = this.debugMode || this.channel === 'voice'
+    this.showTranscript = this.debugMode || this.channel === "voice";
   }
   disconnectedCallback() {
     if (this.channel === "chat") {
@@ -73,30 +79,41 @@ export default class AgentAssistContainerModule extends LightningElement {
 
   async renderedCallback() {
     if (this.loadError) return;
+
+    // load external dependencies as static resources
     await Promise.all([
       loadScript(this, ui_modules + "/container.js"),
-      loadScript(this, ui_modules + "/transcript.js")
+      loadScript(this, ui_modules + "/transcript.js"),
+      loadScript(this, ui_modules + "/common.js"),
+      loadStyle(this, global_styles)
     ]);
+
     try {
+      // get an auth token from the UI Connector endpoint - this uses the connected app you created
       this.token = await integration.registerAuthToken(
         this.consumerKey,
         this.consumerSecret,
         this.endpoint
       );
+      // create a synthetic conversationId using the recordId of the current messaging session
       this.conversationId = `SF-${this.recordId}`;
+      // subscribe to MIAW channels
+      messageChannels.unsubscribeToMessageChannels();
       messageChannels.subscribeToMessageChannels(
         this.recordId,
         this.debugMode,
         this.conversationName,
         this.features,
         this.conversationId,
-        this.messageContext
+        this.messageContext,
+        this.template
       );
     } catch (error) {
       this.loadError = new Error(
         `Got error: "${error.message}". Unable to authorize, please check your SF Trusted URLs, console, and configuration.`
       );
     }
+    // parse the conversation profile to get project and location
     try {
       this.project = this.conversationProfile.match(
         /projects\/(?<p>[\w-_]+)/
@@ -109,18 +126,24 @@ export default class AgentAssistContainerModule extends LightningElement {
         new Error(`"${this.conversationProfile}" is not a valid conversation profile.
         Expected format: projects/<projectId>/locations/<location>/conversationProfiles/<conversationProfileId>`);
     }
+    // for voice integrations, retrieve the conversation name from redis
     if (this.channel === "voice") {
+      if (!this.contactPhone) {
+        this.loadError = new Error("No phone number found for this contact record.")
+      }
       this.conversationName = await conversationName.getConversationName(
         this.token,
         this.endpoint,
-        this.contactPhone
+        this.contactPhone,
+        this.debugMode
       );
     } else if (this.channel === "chat") {
+      // get the conversation name for the channel
       this.conversationName = `projects/${this.project}/locations/${this.location}/conversations/${this.conversationId}`;
     }
     this.initAgentAssistEvents();
 
-    // Optionally enable helpful console logs
+    // optionally enable helpful console logs
     if (this.debugMode) {
       console.log("this:", JSON.stringify(this));
       console.log(`this.recordId: ${this.recordId}`);
@@ -132,10 +155,14 @@ export default class AgentAssistContainerModule extends LightningElement {
       }
       console.log(`this.conversationName: ${this.conversationName}`);
       console.log(`this.token: ${this.token}`);
-      integration.initEventDragnet(this.recordId); // Log all Agent Assist events.
+      console.log("this.showTranscript:", this.showTranscript);
+
+      // Log all Agent Assist events.
+      integration.initEventDragnet(this.recordId);
     }
 
-    // Create the LWC if conversationName is set, else show the empty state
+    // Create the LWC if this.conversationName is set, else show the empty state
+
     // Create a transcript of the Agent Assist conversation.
     if (this.showTranscript) {
       const transcriptContainerEl = this.template.querySelector(
@@ -147,12 +174,13 @@ export default class AgentAssistContainerModule extends LightningElement {
     }
 
     // Create container element
-    const containerEl = document.createElement("agent-assist-ui-modules");
+    const containerEl = document.createElement("agent-assist-ui-modules-v2");
     // Lightning Web Security blocks access to document.fullscreenElement,
     // which is needed for default UI Module copy to clipboard functionality.
     // Setting this causes copy-to-clipboard events to be emitted, which the
     // LWC then handles in integration.handleCopyToClipboard.
     containerEl.generalConfig = { clipboardMode: "EVENT_ONLY" };
+    containerEl.classList.add("agent-assist-ui-modules");
     const containerContainerEl = this.template.querySelector(
       ".agent-assist-container"
     );
@@ -172,61 +200,57 @@ export default class AgentAssistContainerModule extends LightningElement {
     }
     attributes.forEach((attr) => containerEl.setAttribute(attr[0], attr[1]));
 
+    // Create the UiModulesConnector and initialize it with the config
+    const connector = new UiModulesConnector();
+    const config = {};
+    // Basic config
+    config.channel = this.channel;
+    config.features = this.features;
+    config.agentDesktop = "Custom";
+    config.conversationProfileName = this.conversationProfile;
+    // Connector options
+    config.apiConfig = {
+      authToken: this.token,
+      customApiEndpoint: this.endpoint,
+    };
+    config.eventBasedConfig = {
+      notifierServerEndpoint: this.endpoint,
+      library: "SocketIo"
+    };
+    // Salesforce specific config
+    config.uiModuleEventOptions = {
+      namespace: this.recordId,
+    };
+    config.omitScriptNonce = true;
+
     const initializeUIM = () => {
       containerContainerEl.appendChild(containerEl);
+      connector.init(config);
+      if (this.debugMode) {
+        console.log("UiModulesConnector initialized with config:", config);
+        console.log("connector:", connector);
+      }
       // Make the UiM elements visible and hide the empty state
       containerContainerEl.classList.remove("hidden");
-
       if (this.showTranscript) {
-        // Make dynamic layout adjustments for transcript
         const transcriptContainerEl = this.template.querySelector(
-          ".transcript-container"); // left
+          ".transcript-container"
+        );
         transcriptContainerEl.classList.remove("hidden");
-
-        const agentAssistComponentEl = this.template.querySelector('.agent-assist-component')
-        const agentAssistContainerEl = this.template.querySelector(
-          ".agent-assist-container"); // right
-        const transcriptHeaderEl = transcriptContainerEl.querySelector('h3')
-        const transcriptConversationEl = transcriptContainerEl.querySelector('.conversation-container')
-
-        // Watch for resizes on modules and match transcript to  combined height
-        const resizeObserver = new ResizeObserver(_ => {
-          // Check if the transcript is taking the full width of the component
-          if (parseInt(agentAssistComponentEl.clientWidth / transcriptConversationEl.clientWidth) === 1) {
-            // Transcript is taking full width
-            transcriptConversationEl.style.height = 'unset'
-            transcriptConversationEl.style.maxHeight = 'calc(-20px + 25vh)'
-          } else {
-            // 'Transcript is not taking full width'
-            transcriptConversationEl.style.height = '0px'
-            transcriptConversationEl.style.maxHeight = 'unset'
-            let newHeight = agentAssistContainerEl.scrollHeight - transcriptHeaderEl.scrollHeight - 3
-            transcriptConversationEl.style.height = `${newHeight}px`
-          }
-        })
-        const moduleWrappers = this.template.querySelectorAll('module-wrapper')
-        moduleWrappers.forEach(wrapper => resizeObserver.observe(wrapper))
-
-        // Auto-scroll the transcript when new messages appear
-        const mutationObserver = new MutationObserver((records, observer) => {
-          for (record of records) {
-            let last = record.addedNodes[record.addedNodes.length - 1];
-            last.scrollIntoView()
-          }
-        })
-        mutationObserver.observe(transcriptConversationEl, { childList: true })
-
       }
-    }
+    };
 
     if (this.conversationName) {
       initializeUIM();
     } else {
       if (this.debugMode) {
-        console.log("No conversationName, cannot init Agent Assist UI Modules.");
+        console.log(
+          "No conversationName, cannot init Agent Assist UI Modules."
+        );
       }
       if (this.channel === "voice") {
         if (this.debugMode) {
+          // check if conversationName is set
           console.debug("Polling for conversationName every 5 seconds...");
         }
         let interval = setInterval(async () => {
@@ -244,8 +268,12 @@ export default class AgentAssistContainerModule extends LightningElement {
             }
             clearInterval(interval);
             integration.handleApiConnectorInitialized(
-              null, this.debugMode, this.conversationName, this.recordId),
-            initializeUIM();
+              null,
+              this.debugMode,
+              this.conversationName,
+              this.recordId
+            ),
+              initializeUIM();
           }
         }, 5000);
       }
@@ -253,17 +281,17 @@ export default class AgentAssistContainerModule extends LightningElement {
   }
 
   initAgentAssistEvents() {
-    addAgentAssistEventListener(
-      "api-connector-initialized",
-      (event) =>
-        integration.handleApiConnectorInitialized(
-          event,
-          this.debugMode,
-          this.conversationName,
-          this.recordId
-        ),
-      { namespace: this.recordId }
-    );
+    addAgentAssistEventListener("api-connector-initialized", (event) => {
+      integration.handleApiConnectorInitialized(
+        event,
+        this.debugMode,
+        this.conversationName,
+        this.recordId
+      );
+    },
+    {
+      namespace: this.recordId
+    });
     addAgentAssistEventListener(
       "conversation-initialized",
       (event) => {
@@ -279,7 +307,9 @@ export default class AgentAssistContainerModule extends LightningElement {
           );
         }
       },
-      { namespace: this.recordId }
+      {
+        namespace: this.recordId
+      }
     );
     addAgentAssistEventListener(
       "smart-reply-selected",
@@ -289,7 +319,9 @@ export default class AgentAssistContainerModule extends LightningElement {
           this.refs.lwcToolKitApi,
           this.recordId
         ),
-      { namespace: this.recordId }
+      {
+        namespace: this.recordId
+      }
     );
     addAgentAssistEventListener(
       "agent-coaching-response-selected",
@@ -299,21 +331,31 @@ export default class AgentAssistContainerModule extends LightningElement {
           this.refs.lwcToolKitApi,
           this.recordId
         ),
-      { namespace: this.recordId }
+      {
+        namespace: this.recordId
+      }
     );
     addAgentAssistEventListener(
       "copy-to-clipboard",
       (event) => integration.handleCopyToClipboard(event, this.debugMode),
-      { namespace: this.recordId }
+      {
+        namespace: this.recordId
+      }
     );
     if (this.channel === "voice") {
       addAgentAssistEventListener(
         "conversation-completed",
         async () => {
+          const summarizationButton = this.template.querySelector(
+            ".generate-summary-footer button"
+          );
+          summarizationButton.dispatch("click");
           dispatchAgentAssistEvent(
             "conversation-summarization-requested",
             { detail: { conversationName: this.conversationName } },
-            { namespace: this.recordId }
+            {
+              namespace: this.recordId
+            }
           );
           await conversationName.delConversationName(
             this.token,
@@ -321,7 +363,9 @@ export default class AgentAssistContainerModule extends LightningElement {
             this.contactPhone
           );
         },
-        { namespace: this.recordId }
+        {
+          namespace: this.recordId
+        }
       );
     }
   }

@@ -25,9 +25,13 @@ import conversationEndUserMessageChannel from "@salesforce/messageChannel/lightn
 import conversationEndedChannel from "@salesforce/messageChannel/lightning__conversationEnded";
 
 function handleConversationEnded(
-  message, recordId, debugMode, conversationName, features) {
-
-
+  message,
+  recordId,
+  debugMode,
+  conversationName,
+  features,
+  template
+) {
   if (recordId !== message.recordId) return; // conditionally ignore event
   if (debugMode) {
     console.log(
@@ -38,16 +42,21 @@ function handleConversationEnded(
     );
   }
   if (features.includes("CONVERSATION_SUMMARIZATION")) {
-    dispatchAgentAssistEvent(
-      "conversation-summarization-requested",
-      { detail: { conversationName: conversationName } },
-      { namespace: recordId }
+    // Neccessary to create a synthetic click event to trigger summarization modal.
+    const summarizationButton = template.querySelector(
+      ".generate-summary-footer button"
     );
+    summarizationButton.dispatchEvent(new Event('click'))
   }
 }
 
 function handleMessageSend(
-  senderRole, message, recordId, debugMode, conversationId) {
+  senderRole,
+  message,
+  recordId,
+  debugMode,
+  conversationId
+) {
   if (recordId !== message.recordId) return; // conditionally ignore event
   if (debugMode) {
     console.log(
@@ -72,7 +81,9 @@ function handleMessageSend(
         }
       }
     },
-    { namespace: recordId }
+    {
+      namespace: recordId
+    }
   );
 }
 
@@ -84,7 +95,7 @@ function subscribeToMessageChannel(messageContext, channel, handler) {
 
 export function subscribeToMessageChannels(
   recordId, debugMode, conversationName, features,
-  conversationId, messageContext) {
+  conversationId, messageContext, template) {
 
   subscribeToMessageChannel(
     messageContext,
@@ -102,7 +113,7 @@ export function subscribeToMessageChannels(
     messageContext,
     conversationEndedChannel,
     (event) => handleConversationEnded(
-      event, recordId, debugMode, conversationName, features)
+      event, recordId, debugMode, conversationName, features, template)
   );
 }
 

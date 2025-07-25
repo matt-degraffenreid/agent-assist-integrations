@@ -14,137 +14,112 @@
  * limitations under the License.
  */
 
-/* Agent Assist Modules Container */
+/* UIM v2 Agent Assist Component ============================================ */
 .agent-assist-component {
-  background: #fff;
   border-radius: 4px;
-  padding: 4px;
+  border: 1px solid #c9c9c9;
   width: 100%;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  overflow-y: hidden;
+  background:  #f1f3f4;
 }
 
-.drag-container:not(:first-of-type) {
-  margin-top: 8px;
+/* UIM V2 Adjustments ======================================================= */
+
+/* Sets a max height and fixed height on the transcript to support (auto) scrolling */
+.agent-assist-transcript > * {
+  max-height: 671px;
+  height: 671px;
 }
 
-.agent-assist-container {
-  flex: 1;
-  max-width: 100%;
-}
-
-.modules-container .content-wrapper {
-  padding: 0;
-}
-
-.pending-suggested-queries-hidden {
+/* Hides a dimensionless LWC specific element that supports Messaging for In-App and Web */
+.hidden, lightning-conversation-toolkit-api {
   display: none;
 }
 
-/* Generative Knowledge Assist */
-.content-wrapper .main-container {
-  padding: 8px;
+/* Gives the transcript-container a fixed height, which lets autoscroll work properly and helps control LWC size */
+.agent-assist-component .transcript-container {
+  flex: 2;
+  max-height: 710px;
+  height: 710px;
 }
 
-.main-container .bottom-container > * {
-  margin: 8px 0 0;
+/* Gives the agent-assist-container a fixed height, which matches the transcript height and helps control LWC size */
+.agent-assist-component .agent-assist-container {
+  flex: 3;
+  max-height: 710px;
 }
 
-.main-container .answer-card-container {
-  margin-bottom: 0;
+/* Fixes inconsistent padding on bottom of header */
+.agent-assist-ui-modules .main .header {
+  padding-bottom: 12px;
 }
 
-.article-sources-links > * + * {
-  padding-top: 8px;
+/* Fixes misaligned button icons */
+.agent-assist-ui-modules .mat-mdc-button>.mat-icon, .agent-assist-ui-modules .mat-mdc-unelevated-button>.mat-icon, .agent-assist-ui-modules .mat-mdc-raised-button>.mat-icon, .agent-assist-ui-modules .mat-mdc-outlined-button>.mat-icon, .agent-assist-ui-modules .mat-tonal-button>.mat-icon {
+  line-height: 0;
 }
 
-.knowledge-search-article-link.source-element-text {
-  white-space: normal;
-  line-height: 1.1rem;
+/* Adds consistent vertical padding to the empty suggestions wrapper */
+.agent-assist-ui-modules .main .suggestions-container .empty-suggestions-wrapper {
+  padding-top: 2rem;
 }
 
-/* Summarization */
-.summary__content {
-  max-height: unset;
+/* Adds consistent vertical padding to the empty suggestions wrapper for knowledge search */
+.agent-assist-ui-modules .main  .knowledge-search-container .empty-suggestions-wrapper {
+  padding-top: 2rem;
+  padding-bottom: 1rem;
 }
 
-.summary__content-wrapper {
-  padding: 0 16px !important;
+/* Adds padding-bottom to knowledge search container. */
+.agent-assist-ui-modules .main .knowledge-search-container {
+  padding-bottom: 22px;
+  overflow-y: auto;
 }
 
-.summary__content-details {
-  padding-top: 8px
+/* Adds a margin to the bottom of the loading spinner in the knowledge search container */
+.agent-assist-ui-modules .main .knowledge-search-container .knowledge-search-loading-spinner {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
 }
 
-section.summary__title-bar {
-  padding: 0 8px !important;
+/* Fixes feature tag icon alignment in suggestions */
+.suggestions-container .card-container .card-header .header-left .feature-tag {
+  line-height: 0;
 }
 
-button.generate-summary {
-  margin: 8px;
-}
-
-.summary__title-bar-wrapper .mat-icon {
-  line-height: 100%;
-}
-
-.summary__content .mat-mdc-progress-spinner {
-  margin: 16px;
-}
-
-/* Transcript */
+/* Transcript =============================================================== */
 .transcript-container {
   border: 1px solid #ddd;
+  background: #fff;
   flex: 1;
   min-width: 240px;
 }
 
-.agent-assist-transcript > * {
-  max-height: unset;
-}
-
 .transcript-container h3 {
-  background-color: #f8f9fa;
+  background-color: #f1f3f4 !important;
   border-bottom: 1px solid #dadce0;
   color: #5f6368;
   padding: 7px 11px;
-
 font:
     500 16px/22px Google Sans,
     Helvetica Neue,
     sans-serif;
 }
 
-.conversation-container:has(*) {
-  padding-top: 8px !important;
-}
-
+/* Fixes the participant role icon */
 .container .icon-container .role-icon {
-  display: flex !important;
-  padding: 4.5px !important;
+  line-height: 0 !important;
 }
 
-/* Smart Reply */
-.content-wrapper .mat-mdc-chip-set .mdc-evolution-chip-set__chips {
-  margin-left: unset;
-}
-
-.content-wrapper .gmat-body-2.smart-reply__chip--empty {
-  margin: unset;
-  padding: 16px;
-}
-
-/* Load Error */
-.initialization-spinner-wrapper {
-  padding: 16px;
-}
-
+/* Load Error =============================================================== */
 .load-error {
   border-radius: 4px;
   border: 1px solid hsl(5, 81%, 75%);
   background: hsl(5, 81%, 95%);
-  margin-top: 8px;
+  margin: 8px;
+  width: 100%;
 }
 
 .load-error h3, .load-error p {
@@ -160,18 +135,4 @@ font:
   font-size: 12px;
   line-height: 18px;
   padding: 0 11px 7px 11px;
-}
-
-.empty-state {
-  background-color: #fafafa;
-  border-color: #dfdfdf;
-  flex: 1;
-}
-
-.empty-state h3, .empty-state p {
-  color: #777;
-}
-
-.hidden, lightning-conversation-toolkit-api {
-  display: none;
 }
